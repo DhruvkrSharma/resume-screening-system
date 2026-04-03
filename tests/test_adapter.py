@@ -1,0 +1,169 @@
+"""
+Tests for the RuntimeAdapter interface and KaggleRuntimeAdapter lifecycle.
+"""
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from runtime.adapter import ExecutionStatus, RuntimeAdapter
+from runtime.kaggle_adapter import KaggleRuntimeAdapter, _QUEUE_DELAY, _RUN_DURATION
+from runtime.store import ExecutionStore
+
+# A little margin on top of the simulated execution time
+_EXEC_TIMEOUT = _QUEUE_DELAY + _RUN_DURATION + 1.5
+
+
+# ------------------------------------------------------------------ #
+# Fixtures
+# ------------------------------------------------------------------ #
+
+
+@pytest.fixture
+def store() -> ExecutionStore:
+    return ExecutionStore()
+
+
+@pytest.fixture
+def adapter(store: ExecutionStore) -> KaggleRuntimeAdapter:
+    return KaggleRuntimeAdapter(store)
+
+
+# ------------------------------------------------------------------ #
+# Interface contract tests
+# ------------------------------------------------------------------ #
+
+
+def test_kaggle_adapter_is_runtime_adapter(adapter):
+    assert isinstance(adapter, RuntimeAdapter)
+
+
+def test_provider_name(adapter):
+    assert adapter.provider_name == "kaggle"
+
+
+# ------------------------------------------------------------------ #
+# Session tests
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_create_session_returns_session_info(adapter):
+    session = await adapter.create_session()
+    assert session.session_id.startswith("kaggle-session-")
+    assert session.provider == "kaggle"
+
+
+@pytest.mark.asyncio
+async def test_create_session_persisted_in_store(adapter, store):
+    session = await adapter.create_session()
+    stored = store.get_session(session.session_id)
+    assert stored is not None
+    assert stored.session_id == session.session_id
+
+
+# ------------------------------------------------------------------ #
+# Execute tests
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_execute_returns_queued(adapter):
+    session = await adapter.create_session()
+    result = await adapter.execute(
+        session_id=session.session_id,
+        code="print('hello')",
+        execution_id="exec-test-001",
+    )
+    assert result.execution_id == "exec-test-001"
+    assert result.status == ExecutionStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_execute_transitions_to_completed(adapter):
+    """Full lifecycle: QUEUED → RUNNING → COMPLETED."""
+    session = await adapter.create_session()
+    result = await adapter.execute(
+        session_id=session.session_id,
+        code="print('done')",
+        execution_id="exec-lifecycle-001",
+    )
+    assert result.status == ExecutionStatus.QUEUED
+
+    # Wait longer than _QUEUE_DELAY + _RUN_DURATION
+    await asyncio.sleep(_EXEC_TIMEOUT)
+
+    final = await adapter.get_status("exec-lifecycle-001")
+    assert final.status == ExecutionStatus.COMPLETED
+    assert final.output is not None
+
+
+@pytest.mark.asyncio
+async def test_execute_failed_on_bad_code(adapter):
+    """Syntax error should result in FAILED status."""
+    session = await adapter.create_session()
+    await adapter.execute(
+        session_id=session.session_id,
+        code="raise ValueError('boom')",
+        execution_id="exec-fail-001",
+    )
+    await asyncio.sleep(_EXEC_TIMEOUT)
+    final = await adapter.get_status("exec-fail-001")
+    assert final.status == ExecutionStatus.FAILED
+    assert final.error is not None
+
+
+# ------------------------------------------------------------------ #
+# Cancel tests
+# ------------------------------------------------------------------ #
+
+
+@pytest.mark.asyncio
+async def test_cancel_queued_execution(adapter):
+    session = await adapter.create_session()
+    await adapter.execute(
+        session_id=session.session_id,
+        code="print('will be cancelled')",
+        execution_id="exec-cancel-001",
+    )
+    cancelled = await adapter.cancel("exec-cancel-001")
+    assert cancelled.status == ExecutionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancel_unknown_execution_raises(adapter):
+    with pytest.raises(KeyError):
+        await adapter.cancel("does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_get_status_unknown_raises(adapter):
+    with pytest.raises(KeyError):
+        await adapter.get_status("does-not-exist")
+
+
+# ------------------------------------------------------------------ #
+# Store tests
+# ------------------------------------------------------------------ #
+
+
+def test_store_list_executions_by_session(store, adapter):
+    """list_executions should filter by session_id."""
+    from runtime.adapter import ExecutionResult, ExecutionStatus
+    from datetime import datetime
+
+    r1 = ExecutionResult(
+        execution_id="e1", session_id="s1",
+        status=ExecutionStatus.QUEUED, code="x"
+    )
+    r2 = ExecutionResult(
+        execution_id="e2", session_id="s2",
+        status=ExecutionStatus.QUEUED, code="y"
+    )
+    store.save_execution(r1)
+    store.save_execution(r2)
+
+    assert len(store.list_executions(session_id="s1")) == 1
+    assert store.list_executions(session_id="s1")[0].execution_id == "e1"
+    assert len(store.list_executions()) == 2
