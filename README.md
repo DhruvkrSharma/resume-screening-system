@@ -87,3 +87,123 @@ GitHub: https://github.com/Gladiator2005
 ---
 
 **Happy Screening!** 🚀
+
+---
+
+# Production IDE (MVP v0)
+
+A browser-based code execution IDE supporting **Python, C, and C++**.
+
+## Features
+
+- ⚡ **Monaco Editor** – VS Code-quality editor in the browser
+- ▶ **Run Code** – Execute Python / C / C++ with stdout/stderr + exit code + timing
+- 🐳 **Docker Compose** – One-command local deployment
+- 🔒 **Resource limits** – Timeout + output truncation (hardened sandbox planned for v1)
+- 🔌 **WebSocket debug stub** – Placeholder for step-debugger (MVP v1)
+
+## Project Structure
+
+```
+├── backend/
+│   ├── main.py            # FastAPI app (/api/health, /api/execute, /ws/debug stub)
+│   ├── requirements.txt   # Python dependencies
+│   ├── Dockerfile         # Backend image (python:3.12-slim + gcc/g++)
+│   └── tests/
+│       └── test_api.py    # pytest test suite
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx        # Monaco editor + Run button + output panel
+│   │   ├── App.css        # Dark-theme styles
+│   │   └── main.jsx       # React entrypoint
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js     # Vite + /api proxy for dev
+│   └── Dockerfile         # Multi-stage: build + nginx
+├── docker-compose.yml
+└── nginx.conf             # Reverse proxy: /api → backend, SPA fallback
+```
+
+## Quick Start – Docker Compose (recommended)
+
+```bash
+docker compose up --build
+```
+
+- Frontend: http://localhost
+- Health check: http://localhost/api/health
+
+## Local Development
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+# or: python main.py
+```
+
+API available at http://localhost:8000/api/health
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 – API calls are proxied to the backend via Vite.
+
+## Running Tests
+
+```bash
+cd backend
+pip install -r requirements.txt pytest httpx
+pytest tests/ -v
+```
+
+Tests include:
+- Health endpoint
+- Python execution (hello world, stderr, syntax error)
+- C execution (skipped if `gcc` not available)
+- C++ execution (skipped if `g++` not available)
+- Timeout enforcement
+- Input validation (unsupported language, code too long)
+
+## API Reference
+
+### `GET /api/health`
+Returns `{"status": "ok", "version": "0.1.0"}`.
+
+### `POST /api/execute`
+
+```json
+{
+  "code": "print('hello')",
+  "language": "python",
+  "timeout": 10
+}
+```
+
+Response:
+
+```json
+{
+  "stdout": "hello\n",
+  "stderr": "",
+  "exit_code": 0,
+  "execution_time": 0.042,
+  "error": null
+}
+```
+
+Supported languages: `python`, `c`, `cpp`  
+Max timeout: 30 s | Max code length: 50 000 chars | Max output: 10 000 chars
+
+### `WS /ws/debug` *(stub)*
+
+Connects, sends an informational message that the step-debugger is not yet
+implemented, then closes. Full implementation is planned for MVP v1.
