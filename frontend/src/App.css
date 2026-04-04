@@ -1,0 +1,260 @@
+/* Production IDE – styles */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.ide-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.ide-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.ide-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #cccccc;
+}
+
+.ide-badge {
+  font-size: 0.7rem;
+  background: #0e639c;
+  color: #fff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+
+.ide-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.ide-label {
+  font-size: 0.85rem;
+  color: #9d9d9d;
+}
+
+.ide-select {
+  background: #3c3c3c;
+  color: #cccccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.ide-select:focus {
+  outline: 1px solid #0e639c;
+}
+
+.ide-run-btn {
+  margin-left: auto;
+  background: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ide-run-btn:hover:not(:disabled) {
+  background: #1177bb;
+}
+
+.ide-run-btn:disabled,
+.ide-run-btn--loading {
+  background: #555;
+  cursor: not-allowed;
+}
+
+/* ── Editor ──────────────────────────────────────────────────────────────── */
+
+.ide-editor-wrapper {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Fallback plain-text editor shown when Monaco fails to load */
+.ide-fallback-editor {
+  width: 100%;
+  height: 100%;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  border: none;
+  resize: none;
+  padding: 0.75rem 1rem;
+  outline: none;
+}
+
+/* ── Stdin panel ─────────────────────────────────────────────────────────── */
+
+.ide-stdin-panel {
+  flex-shrink: 0;
+  height: 80px;
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ide-stdin-textarea {
+  flex: 1;
+  background: #0a0a0a;
+  color: #d4d4d4;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  border: none;
+  resize: none;
+  padding: 0.5rem 1.25rem;
+  outline: none;
+}
+
+.ide-stdin-textarea::placeholder {
+  color: #555;
+}
+
+/* ── Output panel ────────────────────────────────────────────────────────── */
+
+.ide-output-panel {
+  flex-shrink: 0;
+  height: 220px;
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ide-output-header {
+  padding: 0.4rem 1.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #9d9d9d;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ide-output-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ide-output-meta {
+  font-size: 0.78rem;
+  color: #808080;
+}
+
+.ide-output-meta code {
+  color: #9cdcfe;
+}
+
+.ide-output-truncated {
+  color: #e9a84c;
+  font-style: italic;
+}
+
+.ide-output-placeholder {
+  padding: 0.75rem 1.25rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.ide-kbd {
+  display: inline-block;
+  background: #3c3c3c;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.ide-output-error {
+  padding: 0.5rem 1.25rem;
+  color: #f48771;
+  font-size: 0.85rem;
+}
+
+.ide-output-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4ec9b0;
+  margin-bottom: 0.2rem;
+}
+
+.ide-output-label--err {
+  color: #f48771;
+}
+
+.ide-output-pre {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.ide-output-pre--stdout {
+  background: #0a0a0a;
+  color: #d4d4d4;
+}
+
+.ide-output-pre--stderr {
+  background: #1a0a0a;
+  color: #f48771;
+}
