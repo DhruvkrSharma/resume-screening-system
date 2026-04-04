@@ -135,12 +135,13 @@ GitHub: https://github.com/Gladiator2005
 | Path | Purpose |
 |---|---|
 | `runtime/adapter.py` | `RuntimeAdapter` abstract base class + data models |
-| `runtime/kaggle_adapter.py` | Kaggle stub – simulates full lifecycle |
+| `runtime/kaggle_adapter.py` | Kaggle adapter – real API + local simulation fallback |
 | `runtime/store.py` | Thread-safe in-memory execution store |
 | `backend/api.py` | FastAPI control-plane (all HTTP + WS endpoints) |
 | `backend/auth.py` | Bearer-token middleware |
 | `backend/models.py` | Pydantic request/response schemas |
 | `client/cli_client.py` | End-to-end demo CLI client |
+| `vscode-extension/` | VSCode extension – "Run on Cloud Runtime" command |
 | `tests/` | Pytest suite for adapter + API |
 
 ## Setup (Runtime MVP)
@@ -155,8 +156,26 @@ pip install -r requirements-runtime.txt
 
 ```bash
 cp .env.example .env
-# Edit .env – set KAGGLE_USERNAME and KAGGLE_KEY when ready for real integration
+# Edit .env:
+#   RUNTIME_PROVIDER=kaggle
+#   KAGGLE_USERNAME=<your-kaggle-username>   ← required for real API
+#   KAGGLE_KEY=<your-kaggle-api-key>         ← required for real API
+#   API_TOKEN=<optional-bearer-token>
 ```
+
+> **Without credentials** (no `KAGGLE_USERNAME`/`KAGGLE_KEY`) the adapter runs
+> in **stub/simulation mode** – executions complete locally and are safe for
+> development and CI.  Set the env vars to use the real Kaggle Kernels API.
+
+#### Obtaining Kaggle API credentials
+
+1. Log in at [kaggle.com](https://www.kaggle.com) → **Settings** → **API** → **Create New Token**.
+2. A `kaggle.json` file is downloaded containing `{"username":"…","key":"…"}`.
+3. Copy those values into your `.env`:
+   ```
+   KAGGLE_USERNAME=your-username
+   KAGGLE_KEY=your-api-key
+   ```
 
 ### 3. Start the backend
 
@@ -276,6 +295,33 @@ async def listen():
 asyncio.run(listen())
 ```
 
+## VSCode Extension
+
+The `vscode-extension/` directory contains a VSCode extension that adds a
+**"Run on Cloud Runtime"** command.  It reads the active Python file (or
+selection), submits it to the backend, and streams live results into a
+dedicated Output Channel with status shown in the status bar.
+
+### Build & Run
+
+```bash
+cd vscode-extension
+npm install
+npm run compile
+```
+
+Then open the `vscode-extension/` folder in VSCode and press **F5** to launch
+the Extension Development Host.
+
+### Configure
+
+| Setting | Default | Description |
+|---|---|---|
+| `cloudRuntime.serverUrl` | `http://localhost:8000` | Backend API URL |
+| `cloudRuntime.apiToken` | *(empty)* | Bearer token (leave empty when auth is off) |
+
+See `vscode-extension/README.md` for full usage details.
+
 ## Adding a New Provider
 
 To add a new runtime provider (e.g. Google Colab, SageMaker):
@@ -311,9 +357,8 @@ _PROVIDERS = {
 
 | Limitation | Notes |
 |---|---|
-| Kaggle not fully integrated | The `KaggleRuntimeAdapter` is a **stub** that simulates execution locally. Real Kaggle API calls are marked with `# TODO` comments. |
 | Kaggle cold-start latency | Real Kaggle kernels take 30–120 s to start; no SLA or interactive mode. |
+| Stub fallback | When `KAGGLE_USERNAME`/`KAGGLE_KEY` are not set, code runs locally via `exec()` inside the server process – **unsafe for untrusted input**. Set credentials or deploy behind a firewall. |
 | In-memory state | Restarting the server resets all sessions and executions. Replace `ExecutionStore` with Redis/DB for persistence. |
-| No kernel cancellation via Kaggle API | Kaggle's public API does not expose a stop-kernel endpoint. |
-| Local code execution (stub) | The stub runs submitted code in the API server process – **unsafe for untrusted input**. Replace with real Kaggle execution for production. |
+| No kernel cancellation via Kaggle API | Kaggle's public API does not expose a stop-kernel endpoint; cancel is local-only. |
 | Single-process only | The in-memory store is not shared across worker processes. |

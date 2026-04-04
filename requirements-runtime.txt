@@ -8,3 +8,4 @@ anyio>=4.3.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 anyio[trio]>=4.3.0
+kaggle>=2.0.0
