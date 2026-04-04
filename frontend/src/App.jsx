@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { Component, useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
 
 // Use a relative path so that:
@@ -38,13 +38,43 @@ const MONACO_LANGUAGE = {
   cpp: 'cpp',
 }
 
+// ---------------------------------------------------------------------------
+// Error boundary – catches Monaco loader failures and renders a plain textarea
+// ---------------------------------------------------------------------------
+class MonacoErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <textarea
+          className="ide-fallback-editor"
+          value={this.props.fallbackValue}
+          onChange={(e) => this.props.onFallbackChange(e.target.value)}
+          spellCheck={false}
+        />
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   const [language, setLanguage] = useState('python')
   const [code, setCode] = useState(STARTER_CODE['python'])
+  const [stdin, setStdin] = useState('')
   const [output, setOutput] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const editorRef = useRef(null)
+  const outputRef = useRef(null)
 
   const handleLanguageChange = (e) => {
     const lang = e.target.value
@@ -58,8 +88,11 @@ export default function App() {
     editorRef.current = editor
   }
 
-  const handleRun = async () => {
-    const currentCode = editorRef.current ? editorRef.current.getValue() : code
+  const handleRun = useCallback(async () => {
+    const rawCode = editorRef.current ? editorRef.current.getValue() : code
+    // Normalize Windows line endings so C's scanf and Python's input() behave
+    // consistently across all browsers/OSes.
+    const normalizedCode = rawCode.replace(/\r\n/g, '\n')
     setLoading(true)
     setOutput(null)
     setError(null)
@@ -68,7 +101,12 @@ export default function App() {
       const res = await fetch(`${API_BASE}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: currentCode, language, timeout: 10 }),
+        body: JSON.stringify({
+          code: normalizedCode,
+          language,
+          timeout: 10,
+          stdin: stdin || null,
+        }),
       })
       if (!res.ok) {
         throw new Error(`Server error: ${res.status} ${res.statusText}`)
@@ -80,7 +118,26 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [language, stdin, code]) // editorRef and state setters are stable
+
+  // Scroll the output panel back to the top whenever new results arrive
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = 0
+    }
+  }, [output])
+
+  // Ctrl+Enter / Cmd+Enter triggers Run
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !loading) {
+        e.preventDefault()
+        handleRun()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [loading, handleRun])
 
   return (
     <div className="ide-root">
@@ -110,25 +167,39 @@ export default function App() {
           className={`ide-run-btn ${loading ? 'ide-run-btn--loading' : ''}`}
           onClick={handleRun}
           disabled={loading}
+          title="Run (Ctrl+Enter)"
         >
           {loading ? '⏳ Running…' : '▶ Run'}
         </button>
       </div>
 
       <div className="ide-editor-wrapper">
-        <Editor
-          height="100%"
-          language={MONACO_LANGUAGE[language]}
-          value={code}
-          theme="vs-dark"
-          onChange={(val) => setCode(val || '')}
-          onMount={handleEditorMount}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-          }}
+        <MonacoErrorBoundary fallbackValue={code} onFallbackChange={setCode}>
+          <Editor
+            height="100%"
+            language={MONACO_LANGUAGE[language]}
+            value={code}
+            theme="vs-dark"
+            onChange={(val) => setCode(val || '')}
+            onMount={handleEditorMount}
+            options={{
+              fontSize: 14,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+          />
+        </MonacoErrorBoundary>
+      </div>
+
+      <div className="ide-stdin-panel">
+        <div className="ide-output-header">Stdin (optional)</div>
+        <textarea
+          className="ide-stdin-textarea"
+          value={stdin}
+          onChange={(e) => setStdin(e.target.value)}
+          placeholder="Input to feed the program via stdin…"
+          spellCheck={false}
         />
       </div>
 
@@ -143,7 +214,9 @@ export default function App() {
 
         {!error && !output && !loading && (
           <div className="ide-output-placeholder">
-            Click <strong>▶ Run</strong> to execute your code.
+            Click <strong>▶ Run</strong> (or press{' '}
+            <kbd className="ide-kbd">Ctrl</kbd>+<kbd className="ide-kbd">Enter</kbd>)
+            to execute your code.
           </div>
         )}
 
@@ -152,7 +225,7 @@ export default function App() {
         )}
 
         {output && (
-          <div className="ide-output-results">
+          <div className="ide-output-results" ref={outputRef}>
             {output.error && (
               <div className="ide-output-error">
                 <strong>Execution error:</strong> {output.error}
@@ -162,6 +235,11 @@ export default function App() {
             <div className="ide-output-meta">
               Exit code: <code>{output.exit_code}</code> &nbsp;|&nbsp; Time:{' '}
               <code>{output.execution_time}s</code>
+              {output.truncated && (
+                <span className="ide-output-truncated">
+                  &nbsp;|&nbsp; ⚠ output truncated
+                </span>
+              )}
             </div>
 
             {output.stdout && (
