@@ -1,6 +1,6 @@
 # Resume Screening System
 
-**Author:** Gladiator2005  
+**Author:** DhruvkrSharma  
 **Date:** 2025-11-09  
 **Version:** 1.0.0
 
@@ -16,6 +16,8 @@ An intelligent resume screening system that uses NLP and machine learning to mat
 - ✅ **Multi-Role Support** - Store and screen for multiple job roles
 - ✅ **SQLite Database** - Persistent storage with full audit trail
 - ✅ **Ranked Results** - Sort by skills matched + similarity score
+- ✅ **Resume-Only Internship Matching** - Match one resume to internship roles quickly
+- ✅ **Tailored Resume/CV Drafts** - Generate position-focused draft content
 - ✅ **Google Colab Ready** - Works seamlessly in Colab notebooks
 
 ## Installation
@@ -81,8 +83,8 @@ MIT License - Free to use and modify
 
 ## Author
 
-**Gladiator2005**  
-GitHub: https://github.com/Gladiator2005
+**DhruvkrSharma**  
+GitHub: https://github.com/DhruvkrSharma
 
 ---
 

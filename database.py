@@ -17,10 +17,16 @@ class ResumeDatabase:
         """Initialize database connection and create tables"""
         self.db_path = db_path
         self.init_db()
+
+    def _connect(self):
+        """Create a SQLite connection with foreign key enforcement enabled."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
     
     def init_db(self):
         """Create database tables if they don't exist"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         
         cur.execute("""
@@ -61,10 +67,16 @@ class ResumeDatabase:
     
     def add_role(self, name, skills_text):
         """Add or update a role"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute(
-            "INSERT OR REPLACE INTO roles (name, skills_text, created_at) VALUES (?, ?, ?)"
+            """
+            INSERT INTO roles (name, skills_text, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                skills_text = excluded.skills_text,
+                created_at = excluded.created_at
+            """
             , (name, skills_text, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
@@ -72,7 +84,7 @@ class ResumeDatabase:
     
     def get_role(self, role_id):
         """Get role by ID"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute("SELECT id, name, skills_text FROM roles WHERE id=?", (role_id,))
         row = cur.fetchone()
@@ -86,14 +98,14 @@ class ResumeDatabase:
     
     def list_roles(self):
         """Get all roles as DataFrame"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         df = pd.read_sql("SELECT * FROM roles ORDER BY id", conn)
         conn.close()
         return df
     
     def delete_role(self, role_id):
         """Delete role and associated results"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute("DELETE FROM results WHERE role_id=?", (role_id,))
         cur.execute("DELETE FROM roles WHERE id=?", (role_id,))
@@ -102,7 +114,7 @@ class ResumeDatabase:
     
     def add_resume(self, pdf_path, text_snippet, extraction_method):
         """Add resume to database"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO resumes (pdf_path, text_snippet, extraction_method, extracted_at) VALUES (?, ?, ?, ?)"
@@ -115,7 +127,7 @@ class ResumeDatabase:
     
     def get_resume(self, resume_id):
         """Get resume by ID"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute("SELECT pdf_path, text_snippet FROM resumes WHERE id=?", (resume_id,))
         row = cur.fetchone()
@@ -124,7 +136,7 @@ class ResumeDatabase:
     
     def add_result(self, role_id, resume_id, matched_skills, num_matched, similarity_score):
         """Add screening result"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cur = conn.cursor()
         cur.execute(
             """INSERT INTO results (role_id, resume_id, matched_skills, num_matched_skills, similarity_score, created_at)
@@ -136,12 +148,13 @@ class ResumeDatabase:
     
     def get_results_for_role(self, role_id, top_n=None):
         """Get screening results for a role"""
-        conn = sqlite3.connect(self.db_path)
-        query = f"""
+        conn = self._connect()
+        query = """
             SELECT 
                 r.id as result_id,
                 ro.name as role_name,
                 re.pdf_path,
+                re.id as resume_id,
                 r.matched_skills,
                 r.num_matched_skills,
                 r.similarity_score,
@@ -150,12 +163,20 @@ class ResumeDatabase:
             FROM results r
             JOIN roles ro ON r.role_id = ro.id
             JOIN resumes re ON r.resume_id = re.id
-            WHERE r.role_id = {{role_id}}
-            ORDER BY r.num_matched_skills DESC, r.similarity_score DESC
+            WHERE r.role_id = ?
+            ORDER BY r.num_matched_skills DESC, r.similarity_score DESC, re.id ASC, r.id ASC
         """
-        if top_n:
-            query += f" LIMIT {{top_n}}"
+        params = [role_id]
+        if top_n is not None:
+            try:
+                limit = int(top_n)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("top_n must be a positive integer") from exc
+            if limit <= 0:
+                raise ValueError("top_n must be a positive integer")
+            query += " LIMIT ?"
+            params.append(limit)
         
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
