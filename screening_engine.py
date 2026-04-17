@@ -5,11 +5,14 @@ Date: 2025-11-09
 """
 
 from pathlib import Path
+import logging
 from pdf_extractor import extract_text_from_pdf
 from skill_extractor import SkillExtractor
 from semantic_matcher import SemanticMatcher
 from database import ResumeDatabase
 from config import SKILLS_DB
+
+logger = logging.getLogger(__name__)
 
 
 class ResumeScreener:
@@ -26,15 +29,22 @@ class ResumeScreener:
         skills = self.skill_extractor.extract_skills(job_text)
         skills_text = "; ".join(skills)
         self.db.add_role(name, skills_text)
-        print(f"[INFO] Role '{name}' saved with skills: {skills_text}")
+        logger.info("Role '%s' saved with %d extracted skill(s)", name, len(skills))
         return skills
     
     def add_role_manual(self, name, skills_list):
         """Add role with manually specified skills"""
-        skills_text = "; ".join([s.strip().lower() for s in skills_list if s.strip()])
+        normalized = []
+        seen = set()
+        for skill in skills_list:
+            value = skill.strip().lower()
+            if value and value not in seen:
+                seen.add(value)
+                normalized.append(value)
+        skills_text = "; ".join(normalized)
         self.db.add_role(name, skills_text)
-        print(f"[INFO] Role '{name}' saved with skills: {skills_text}")
-        return skills_text.split("; ")
+        logger.info("Role '%s' saved with %d manual skill(s)", name, len(normalized))
+        return normalized
     
     def screen_resumes(self, role_id, pdf_paths, semantic_threshold=0.45, skip_missing=True, use_fallback=False, fallbacks=None):
         """Screen multiple resumes for a role"""
@@ -55,17 +65,17 @@ class ResumeScreener:
             if not path or not Path(path).exists():
                 msg = f"[WARN] PDF not found: {path}"
                 if skip_missing:
-                    print(msg + " -- skipping")
+                    logger.warning("%s -- skipping", msg)
                     continue
                 else:
-                    print(msg + " -- using fallback/empty")
+                    logger.warning("%s -- using fallback/empty", msg)
                     text = fallbacks[i] if (use_fallback and i < len(fallbacks) and fallbacks[i]) else ""
                     method = "fallback" if text else None
             else:
-                print(f"[INFO] Extracting: {path}")
+                logger.info("Extracting PDF: %s", path)
                 text = extract_text_from_pdf(path)
                 method = "extracted"
-                print(f"[INFO] Method: {method}, Length: {len(text or '')}")
+                logger.info("Extraction method=%s text_length=%d", method, len(text or ""))
                 
                 if (not text or len(text.strip()) == 0) and use_fallback and i < len(fallbacks) and fallbacks[i]:
                     text = fallbacks[i]
@@ -78,16 +88,16 @@ class ResumeScreener:
             valid_paths.append(path)
         
         if not resumes_texts:
-            print("[INFO] No resumes to screen")
+            logger.info("No resumes to screen")
             return []
         
-        print(f"[INFO] Extracting skills from {len(resumes_texts)} resume(s)...")
+        logger.info("Extracting skills from %d resume(s)", len(resumes_texts))
         resume_skills_exact = [self.skill_extractor.extract_skills(t) for t in resumes_texts]
         
-        print(f"[INFO] Computing semantic matches (threshold={semantic_threshold})...")
+        logger.info("Computing semantic matches (threshold=%s)", semantic_threshold)
         semantic_matches = self.semantic_matcher.compute_skill_matches(job_skills, resumes_texts, threshold=semantic_threshold)
         
-        print("[INFO] Computing similarity scores...")
+        logger.info("Computing similarity scores")
         sim_scores = self.semantic_matcher.compute_similarity_scores(role_text, resumes_texts)
         
         results = []
@@ -108,5 +118,5 @@ class ResumeScreener:
                 "similarity_score": similarity_score
             })
         
-        print(f"[INFO] Screening complete! Processed {len(results)} resume(s)")
+        logger.info("Screening complete. Processed %d resume(s)", len(results))
         return results
