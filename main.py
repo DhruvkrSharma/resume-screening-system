@@ -10,10 +10,13 @@ import pandas as pd
 from pathlib import Path
 import tempfile
 import os
+import logging
 from screening_engine import ResumeScreener
 from database import ResumeDatabase
 import plotly.express as px
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -120,8 +123,13 @@ elif page == "➕ Add Role":
                         skills = st.session_state.screener.add_role_from_text(role_name, job_description)
                         st.success(f"✅ Role '{role_name}' added successfully!")
                         st.info(f"**Extracted {len(skills)} skills:** {', '.join(skills)}")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                    except ValueError as e:
+                        st.error(f"Validation error: {str(e)}")
+                    except sqlite3.IntegrityError:
+                        st.error("Role name already exists. Please use a different name.")
+                    except Exception:
+                        logger.exception("Failed to add role from job description")
+                        st.error("Unable to add role due to an internal error.")
             else:
                 st.warning("Please fill in both role name and job description.")
     
@@ -138,8 +146,11 @@ elif page == "➕ Add Role":
                         skills_list = [s.strip() for s in manual_skills.split(',')]
                         st.session_state.screener.add_role_manual(manual_role_name, skills_list)
                         st.success(f"✅ Role '{manual_role_name}' added with {len(skills_list)} skills!")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                    except sqlite3.IntegrityError:
+                        st.error("Role name already exists. Please use a different name.")
+                    except Exception:
+                        logger.exception("Failed to add role manually")
+                        st.error("Unable to add role due to an internal error.")
             else:
                 st.warning("Please fill in both role name and skills.")
 
@@ -177,8 +188,8 @@ elif page == "📊 Screen Resumes":
         if st.button("🔍 Start Screening", type="primary", disabled=not uploaded_files):
             if uploaded_files:
                 with st.spinner(f"Screening {len(uploaded_files)} resume(s)..."):
+                    temp_paths = []
                     try:
-                        temp_paths = []
                         for uploaded_file in uploaded_files:
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                                 tmp_file.write(uploaded_file.getvalue())
@@ -190,13 +201,7 @@ elif page == "📊 Screen Resumes":
                             semantic_threshold=semantic_threshold,
                             skip_missing=skip_missing
                         )
-                        
-                        for path in temp_paths:
-                            try:
-                                os.unlink(path)
-                            except:
-                                pass
-                        
+
                         st.success(f"✅ Successfully screened {len(results)} resume(s)!")
                         
                         if results:
@@ -235,8 +240,17 @@ elif page == "📊 Screen Resumes":
                                                size='num_matched_skills', title='Skills vs Similarity Score')
                                 st.plotly_chart(fig, use_container_width=True)
                     
-                    except Exception as e:
-                        st.error(f"Error during screening: {str(e)}")
+                    except ValueError as e:
+                        st.error(f"Validation error: {str(e)}")
+                    except Exception:
+                        logger.exception("Error during resume screening")
+                        st.error("Error during screening. Please check logs and try again.")
+                    finally:
+                        for path in temp_paths:
+                            try:
+                                os.unlink(path)
+                            except OSError:
+                                logger.debug("Temporary file cleanup failed for path: %s", path, exc_info=True)
 
 # View Results Page
 elif page == "📈 View Results":

@@ -3,27 +3,40 @@ import pdfplumber
 import pytesseract
 from PIL import Image
 import io
+import logging
 
 def extract_text_with_pymupdf(pdf_path):
     text = ''
-    with fitz.open(pdf_path) as doc:
-        for page in doc:
-            text += page.get_text()
+    try:
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text += page.get_text()
+    except Exception:
+        logging.getLogger(__name__).warning("PyMuPDF extraction failed for %s", pdf_path, exc_info=True)
+        return ''
     return text
 
 def extract_text_with_pdfplumber(pdf_path):
     text = ''
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ''
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ''
+    except Exception:
+        logging.getLogger(__name__).warning("pdfplumber extraction failed for %s", pdf_path, exc_info=True)
+        return ''
     return text
 
 def extract_text_with_ocr(pdf_path):
     text = ''
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            img = page.to_image().original
-            text += pytesseract.image_to_string(img)  # OCR extraction
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                img = page.to_image().original
+                text += pytesseract.image_to_string(img)  # OCR extraction
+    except Exception:
+        logging.getLogger(__name__).warning("OCR extraction failed for %s", pdf_path, exc_info=True)
+        return ''
     return text
 
 

@@ -4,10 +4,13 @@ Author: Gladiator2005
 Date: 2025-11-09
 """
 
+import logging
+
 try:
     from google.colab import files as colab_files
-except Exception:
+except ImportError:
     colab_files = None
+    logging.getLogger(__name__).warning("google.colab.files is unavailable outside Google Colab.")
 
 
 def upload_pdfs_colab():
@@ -39,5 +42,5 @@ def export_results_csv(results_df, filename="screening_results.csv"):
     print(f"Results exported to {filename}")
     
     # Download in Colab
-    if colab_files:
+    if colab_files is not None:
         colab_files.download(filename)

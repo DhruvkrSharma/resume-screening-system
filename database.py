@@ -64,7 +64,12 @@ class ResumeDatabase:
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
         cur.execute(
-            "INSERT OR REPLACE INTO roles (name, skills_text, created_at) VALUES (?, ?, ?)"
+            """
+            INSERT INTO roles (name, skills_text, created_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                skills_text=excluded.skills_text
+            """
             , (name, skills_text, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
@@ -137,7 +142,7 @@ class ResumeDatabase:
     def get_results_for_role(self, role_id, top_n=None):
         """Get screening results for a role"""
         conn = sqlite3.connect(self.db_path)
-        query = f"""
+        query = """
             SELECT 
                 r.id as result_id,
                 ro.name as role_name,
@@ -150,12 +155,20 @@ class ResumeDatabase:
             FROM results r
             JOIN roles ro ON r.role_id = ro.id
             JOIN resumes re ON r.resume_id = re.id
-            WHERE r.role_id = {{role_id}}
+            WHERE r.role_id = ?
             ORDER BY r.num_matched_skills DESC, r.similarity_score DESC
         """
-        if top_n:
-            query += f" LIMIT {{top_n}}"
+        params = [role_id]
+        if top_n is not None:
+            try:
+                limit = int(top_n)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("top_n must be convertible to an integer") from exc
+            if limit <= 0:
+                raise ValueError("top_n must be a positive integer")
+            query += " LIMIT ?"
+            params.append(limit)
         
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
