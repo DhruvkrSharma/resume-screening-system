@@ -250,7 +250,7 @@ elif page == "📊 Screen Resumes":
                             try:
                                 os.unlink(path)
                             except OSError:
-                                pass
+                                logger.debug("Temporary file cleanup failed for path: %s", path, exc_info=True)
 
 # View Results Page
 elif page == "📈 View Results":

@@ -21,6 +21,7 @@ class SemanticMatcher:
             )
 
     def _tokenize(self, text):
+        """Tokenize text for lexical fallback scoring when transformer model is unavailable."""
         return set(re.findall(r"\b[a-z0-9+\-#\.]{2,}\b", (text or "").lower()))
     
     def compute_skill_matches(self, job_skills, resumes_texts, threshold=DEFAULT_SEMANTIC_THRESHOLD):

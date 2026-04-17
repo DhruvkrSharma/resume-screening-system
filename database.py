@@ -161,9 +161,12 @@ class ResumeDatabase:
         """
         params = [role_id]
         if top_n is not None:
-            limit = int(top_n)
+            try:
+                limit = int(top_n)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("top_n must be a valid positive integer") from exc
             if limit <= 0:
-                raise ValueError("top_n must be a positive integer")
+                raise ValueError("top_n must be a valid positive integer")
             query += " LIMIT ?"
             params.append(limit)
         

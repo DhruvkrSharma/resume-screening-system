@@ -104,7 +104,7 @@ class SkillExtractor:
                     if len(ctext) >= 3 and any(tok.lemma_.lower() in self.skills for tok in chunk):
                         found.add(ctext)
             except ValueError:
-                pass
+                logging.getLogger(__name__).debug("Skipping noun_chunks fallback due to missing parser pipeline")
 
         return sorted(found)
 
