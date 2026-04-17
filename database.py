@@ -163,9 +163,9 @@ class ResumeDatabase:
             try:
                 limit = int(top_n)
             except (TypeError, ValueError) as exc:
-                raise ValueError("top_n must be a valid positive integer") from exc
+                raise ValueError("top_n must be an integer") from exc
             if limit <= 0:
-                raise ValueError("top_n must be a valid positive integer")
+                raise ValueError("top_n must be positive")
             query += " LIMIT ?"
             params.append(limit)
         
