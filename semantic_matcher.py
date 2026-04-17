@@ -58,7 +58,8 @@ class SemanticMatcher:
             for resume_text in resumes_texts:
                 resume_tokens = self._tokenize(resume_text)
                 union = role_tokens.union(resume_tokens)
-                scores.append(len(role_tokens.intersection(resume_tokens)) / len(union) if union else 0.0)
+                intersection = role_tokens.intersection(resume_tokens)
+                scores.append(len(intersection) / len(union) if union else 0.0)
             return scores
         
         role_emb = self.model.encode([role_text], convert_to_tensor=True)

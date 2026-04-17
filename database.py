@@ -68,8 +68,7 @@ class ResumeDatabase:
             INSERT INTO roles (name, skills_text, created_at)
             VALUES (?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
-                skills_text=excluded.skills_text,
-                created_at=excluded.created_at
+                skills_text=excluded.skills_text
             """
             , (name, skills_text, datetime.now(timezone.utc).isoformat())
         )
