@@ -1,6 +1,6 @@
 # Resume Screening System
 
-**Author:** Gladiator2005  
+**Maintainer:** DhruvkrSharma  
 **Date:** 2025-11-09  
 **Version:** 1.0.0
 
@@ -81,8 +81,8 @@ MIT License - Free to use and modify
 
 ## Author
 
-**Gladiator2005**  
-GitHub: https://github.com/Gladiator2005
+**DhruvkrSharma**  
+GitHub: https://github.com/DhruvkrSharma
 
 ---
 

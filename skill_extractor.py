@@ -5,6 +5,7 @@ Date: 2025-11-09
 """
 
 import re
+import logging
 import spacy
 from spacy.matcher import PhraseMatcher
 
@@ -16,23 +17,25 @@ except ImportError:
         "python", "java", "sql", "react", "docker", "kubernetes"
     ]
 
+logger = logging.getLogger(__name__)
+
 
 def _safe_load_spacy_model(model_name: str):
     """
-    Try to load a spaCy model. If not installed, attempt to download it.
-    If download fails (e.g. no network), fall back to blank('en') pipeline.
+    Load spaCy model deterministically.
+    If unavailable, use blank('en') and emit clear setup guidance.
     """
     try:
         return spacy.load(model_name)
-    except OSError:
-        try:
-            # Attempt auto-download (works locally; may be blocked in some CI/Streamlit envs)
-            from spacy.cli import download
-            download(model_name)
-            return spacy.load(model_name)
-        except Exception:
-            # Final fallback to ensure app still runs (reduced accuracy)
-            return spacy.blank("en")
+    except OSError as exc:
+        logger.warning(
+            "spaCy model '%s' not available (%s). "
+            "Install it with: python -m spacy download %s. Falling back to spacy.blank('en').",
+            model_name,
+            exc,
+            model_name,
+        )
+        return spacy.blank("en")
 
 
 class SkillExtractor:
@@ -103,10 +106,13 @@ class SkillExtractor:
 
         # 4) Noun-chunk best effort
         if not found and hasattr(doc, "noun_chunks"):
-            for chunk in doc.noun_chunks:
-                ctext = chunk.text.lower().strip()
-                if len(ctext) >= 3 and any(tok.lemma_.lower() in self.skills for tok in chunk):
-                    found.add(ctext)
+            try:
+                for chunk in doc.noun_chunks:
+                    ctext = chunk.text.lower().strip()
+                    if len(ctext) >= 3 and any(tok.lemma_.lower() in self.skills for tok in chunk):
+                        found.add(ctext)
+            except ValueError:
+                logger.debug("Noun chunk parser unavailable in current spaCy pipeline.")
 
         return sorted(found)
 

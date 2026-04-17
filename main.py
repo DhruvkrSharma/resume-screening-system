@@ -2,18 +2,19 @@
 Streamlit Frontend for Resume Screening System
 Author: Gladiator2005
 Date: 2025-11-09
-Usage: streamlit run app.py
+Usage: streamlit run main.py
 """
 
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 import tempfile
 import os
+import logging
 from screening_engine import ResumeScreener
 from database import ResumeDatabase
 import plotly.express as px
 import sqlite3
+from config import MAX_UPLOAD_SIZE_BYTES, MIN_MANUAL_SKILLS, REPO_URL, TOP_N_LIMIT_MAX
 
 # Page configuration
 st.set_page_config(
@@ -22,6 +23,48 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@st.cache_resource
+def get_screener():
+    """Cache heavy NLP/ML resources."""
+    return ResumeScreener()
+
+
+def normalize_skill_input(raw_text):
+    """Normalize, trim, and deduplicate comma-separated skills."""
+    normalized = []
+    seen = set()
+    for skill in raw_text.split(","):
+        cleaned = skill.strip().lower()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            normalized.append(cleaned)
+    return normalized
+
+
+def validate_uploaded_pdfs(uploaded_files):
+    """Validate uploaded PDFs by type/signature and file size."""
+    valid_files = []
+    errors = []
+    for uploaded_file in uploaded_files:
+        payload = uploaded_file.getvalue()
+        is_pdf_signature = payload.startswith(b"%PDF-")
+        is_pdf_type = uploaded_file.type in ("application/pdf", "")
+        if not (is_pdf_signature and is_pdf_type):
+            errors.append(f"{uploaded_file.name}: invalid PDF file")
+            continue
+        if len(payload) > MAX_UPLOAD_SIZE_BYTES:
+            errors.append(
+                f"{uploaded_file.name}: file too large ({len(payload)} bytes). "
+                f"Max allowed is {MAX_UPLOAD_SIZE_BYTES} bytes"
+            )
+            continue
+        valid_files.append(uploaded_file)
+    return valid_files, errors
 
 # Custom CSS
 st.markdown("""
@@ -44,7 +87,7 @@ st.markdown("""
 
 # Initialize session state
 if 'screener' not in st.session_state:
-    st.session_state.screener = ResumeScreener()
+    st.session_state.screener = get_screener()
 if 'results' not in st.session_state:
     st.session_state.results = None
 
@@ -57,12 +100,20 @@ with st.sidebar:
     st.title("Navigation")
     page = st.radio(
         "Select Page",
-        ["🏠 Home", "➕ Add Role", "📊 Screen Resumes", "📈 View Results", "⚙️ Settings"]
+        [
+            "🏠 Home",
+            "➕ Add Role",
+            "📊 Screen Resumes",
+            "🎯 Internship Matching",
+            "📝 Tailored Resume/CV",
+            "📈 View Results",
+            "⚙️ Settings",
+        ],
     )
     
     st.markdown("---")
     st.info("**Features:**\n- PDF Text Extraction\n- NLP Skill Matching\n- Semantic Analysis\n- Multi-Role Support")
-    st.success("**Author:** Gladiator2005\n**Date:** 2025-11-09")
+    st.success("**Maintainer:** DhruvkrSharma\n**Date:** 2025-11-09")
 
 # Home Page
 if page == "🏠 Home":
@@ -75,7 +126,7 @@ if page == "🏠 Home":
     
     with col2:
         db = ResumeDatabase()
-        conn = sqlite3.connect(db.db_path)
+        conn = db._connect()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM resumes")
         resume_count = cursor.fetchone()[0]
@@ -83,7 +134,7 @@ if page == "🏠 Home":
         st.metric("Resumes Processed", resume_count)
     
     with col3:
-        conn = sqlite3.connect(db.db_path)
+        conn = db._connect()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM results")
         result_count = cursor.fetchone()[0]
@@ -114,14 +165,17 @@ elif page == "➕ Add Role":
                                        placeholder="Paste the complete job description here...")
         
         if st.button("🚀 Add Role & Extract Skills", type="primary"):
-            if role_name and job_description:
+            role_name_clean = (role_name or "").strip()
+            job_description_clean = (job_description or "").strip()
+            if role_name_clean and job_description_clean:
                 with st.spinner("Extracting skills using NLP..."):
                     try:
-                        skills = st.session_state.screener.add_role_from_text(role_name, job_description)
-                        st.success(f"✅ Role '{role_name}' added successfully!")
+                        skills = st.session_state.screener.add_role_from_text(role_name_clean, job_description_clean)
+                        st.success(f"✅ Role '{role_name_clean}' added successfully!")
                         st.info(f"**Extracted {len(skills)} skills:** {', '.join(skills)}")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                    except (ValueError, sqlite3.Error, RuntimeError) as exc:
+                        logger.exception("Failed to add role from job description")
+                        st.error(f"Could not add role: {exc}")
             else:
                 st.warning("Please fill in both role name and job description.")
     
@@ -132,14 +186,20 @@ elif page == "➕ Add Role":
                                       placeholder="Python, Machine Learning, TensorFlow, SQL, AWS")
         
         if st.button("➕ Add Role", type="primary", key="manual_add"):
-            if manual_role_name and manual_skills:
+            manual_role_name_clean = (manual_role_name or "").strip()
+            if manual_role_name_clean and manual_skills:
                 with st.spinner("Adding role..."):
                     try:
-                        skills_list = [s.strip() for s in manual_skills.split(',')]
-                        st.session_state.screener.add_role_manual(manual_role_name, skills_list)
-                        st.success(f"✅ Role '{manual_role_name}' added with {len(skills_list)} skills!")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+                        skills_list = normalize_skill_input(manual_skills)
+                        if len(skills_list) < MIN_MANUAL_SKILLS:
+                            raise ValueError(
+                                f"Please provide at least {MIN_MANUAL_SKILLS} valid skill(s)."
+                            )
+                        st.session_state.screener.add_role_manual(manual_role_name_clean, skills_list)
+                        st.success(f"✅ Role '{manual_role_name_clean}' added with {len(skills_list)} skills!")
+                    except (ValueError, sqlite3.Error, RuntimeError) as exc:
+                        logger.exception("Failed to add role manually")
+                        st.error(f"Could not add role: {exc}")
             else:
                 st.warning("Please fill in both role name and skills.")
 
@@ -166,6 +226,9 @@ elif page == "📊 Screen Resumes":
         uploaded_files = st.file_uploader("Upload PDF resumes", type=['pdf'], 
                                           accept_multiple_files=True,
                                           help="Upload one or more PDF resume files")
+        st.caption(
+            "🔒 Privacy note: Uploaded resumes are used for screening within this app session."
+        )
         
         col1, col2 = st.columns(2)
         with col1:
@@ -177,9 +240,15 @@ elif page == "📊 Screen Resumes":
         if st.button("🔍 Start Screening", type="primary", disabled=not uploaded_files):
             if uploaded_files:
                 with st.spinner(f"Screening {len(uploaded_files)} resume(s)..."):
+                    temp_paths = []
                     try:
-                        temp_paths = []
-                        for uploaded_file in uploaded_files:
+                        valid_files, errors = validate_uploaded_pdfs(uploaded_files)
+                        for error in errors:
+                            st.warning(error)
+                        if not valid_files:
+                            raise ValueError("No valid PDF files available for screening.")
+
+                        for uploaded_file in valid_files:
                             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                                 tmp_file.write(uploaded_file.getvalue())
                                 temp_paths.append(tmp_file.name)
@@ -191,19 +260,14 @@ elif page == "📊 Screen Resumes":
                             skip_missing=skip_missing
                         )
                         
-                        for path in temp_paths:
-                            try:
-                                os.unlink(path)
-                            except:
-                                pass
-                        
                         st.success(f"✅ Successfully screened {len(results)} resume(s)!")
                         
                         if results:
                             results_df = pd.DataFrame(results)
                             results_df = results_df.sort_values(
-                                by=['num_matched_skills', 'similarity_score'],
-                                ascending=False
+                                by=['num_matched_skills', 'similarity_score', 'resume_id'],
+                                ascending=[False, False, True],
+                                kind='mergesort',
                             )
                             
                             st.subheader("📊 Screening Results")
@@ -235,8 +299,123 @@ elif page == "📊 Screen Resumes":
                                                size='num_matched_skills', title='Skills vs Similarity Score')
                                 st.plotly_chart(fig, use_container_width=True)
                     
-                    except Exception as e:
-                        st.error(f"Error during screening: {str(e)}")
+                    except (ValueError, sqlite3.Error, RuntimeError, OSError) as exc:
+                        logger.exception("Error during screening workflow")
+                        st.error(f"Error during screening: {exc}")
+                    finally:
+                        for path in temp_paths:
+                            try:
+                                os.unlink(path)
+                            except OSError:
+                                logger.warning("Failed to delete temp file: %s", path)
+
+# Internship Matching Page
+elif page == "🎯 Internship Matching":
+    st.header("Resume-Only Internship Matching")
+    st.write("Upload resume(s) and get ranked internship matches with skill-gap insights.")
+    st.caption("🔒 Privacy note: Uploaded resumes may contain sensitive information. Review outputs before sharing.")
+
+    uploaded_files = st.file_uploader(
+        "Upload PDF resume(s) for internship matching",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="internship_upload",
+    )
+    top_n = st.slider("Top internship matches per resume", 1, 5, 3, key="internship_top_n")
+
+    if st.button("🎯 Match Internship Roles", type="primary", disabled=not uploaded_files):
+        temp_paths = []
+        try:
+            valid_files, errors = validate_uploaded_pdfs(uploaded_files)
+            for error in errors:
+                st.warning(error)
+            if not valid_files:
+                raise ValueError("No valid PDF files available for internship matching.")
+
+            for uploaded_file in valid_files:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    temp_paths.append(tmp_file.name)
+
+            match_results = st.session_state.screener.match_internships_for_resumes(temp_paths, top_n=top_n)
+            st.session_state["internship_match_results"] = match_results
+
+            if not match_results:
+                st.info("No resumes were matched.")
+            else:
+                for idx, resume_result in enumerate(match_results, start=1):
+                    st.markdown(f"### Resume {idx}")
+                    profile = resume_result.get("profile", {})
+                    st.write(f"**Extracted Skills ({len(profile.get('skills', []))}):** {', '.join(profile.get('skills', [])) or 'None'}")
+                    table_rows = []
+                    for rank, match in enumerate(resume_result.get("matches", []), start=1):
+                        table_rows.append(
+                            {
+                                "rank": rank,
+                                "role_name": match["role_name"],
+                                "score": match["score"],
+                                "missing_skills": ", ".join(match["missing_skills"]) or "None",
+                            }
+                        )
+                    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+        except (ValueError, RuntimeError, OSError) as exc:
+            logger.exception("Internship matching failed")
+            st.error(f"Internship matching failed: {exc}")
+        finally:
+            for path in temp_paths:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    logger.warning("Failed to delete temp file: %s", path)
+
+# Tailored Resume/CV Page
+elif page == "📝 Tailored Resume/CV":
+    st.header("Tailored Resume/CV Draft Generator")
+    st.write("Generate deterministic draft text for a selected internship role based on your uploaded resume.")
+    st.caption("🔒 Privacy note: Review generated text to remove sensitive details before external use.")
+
+    uploaded_file = st.file_uploader(
+        "Upload one PDF resume",
+        type=["pdf"],
+        accept_multiple_files=False,
+        key="tailored_upload",
+    )
+    role_names = st.session_state.screener.list_internship_role_names()
+    selected_role_name = st.selectbox("Select target internship role", role_names)
+
+    if st.button("📝 Generate Tailored Drafts", type="primary", disabled=not uploaded_file):
+        temp_paths = []
+        try:
+            valid_files, errors = validate_uploaded_pdfs([uploaded_file])
+            for error in errors:
+                st.warning(error)
+            if not valid_files:
+                raise ValueError("Uploaded resume is not a valid PDF.")
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                tmp_file.write(valid_files[0].getvalue())
+                temp_paths.append(tmp_file.name)
+
+            resume_text = st.session_state.screener.extract_resume_text(temp_paths[0])
+            draft = st.session_state.screener.generate_tailored_documents(resume_text, selected_role_name)
+
+            st.subheader("Extracted Profile")
+            st.write(", ".join(draft["profile"]["skills"]) or "No skills extracted")
+
+            st.subheader("Tailored Resume Draft")
+            st.text_area("Generated Resume", value=draft["tailored_resume"], height=260)
+
+            st.subheader("Tailored CV Draft")
+            st.text_area("Generated CV", value=draft["tailored_cv"], height=220)
+        except (ValueError, RuntimeError, OSError) as exc:
+            logger.exception("Tailored document generation failed")
+            st.error(f"Tailored document generation failed: {exc}")
+        finally:
+            for path in temp_paths:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    logger.warning("Failed to delete temp file: %s", path)
 
 # View Results Page
 elif page == "📈 View Results":
@@ -251,11 +430,16 @@ elif page == "📈 View Results":
         selected_role = st.selectbox("Select Role to View Results", options=list(role_options.keys()))
         role_id = role_options[selected_role]
         
-        top_n = st.slider("Number of top candidates to display", 5, 50, 10)
+        top_n = st.slider("Number of top candidates to display", 5, TOP_N_LIMIT_MAX, 10)
         
         if st.button("📊 Load Results"):
             with st.spinner("Loading results..."):
-                results_df = st.session_state.screener.db.get_results_for_role(role_id, top_n=top_n)
+                try:
+                    results_df = st.session_state.screener.db.get_results_for_role(role_id, top_n=top_n)
+                except (ValueError, sqlite3.Error) as exc:
+                    logger.exception("Failed to load role results")
+                    st.error(f"Could not load results: {exc}")
+                    results_df = pd.DataFrame()
                 
                 if results_df.empty:
                     st.info("No screening results found for this role.")
@@ -301,17 +485,17 @@ elif page == "⚙️ Settings":
     
     with tab2:
         st.subheader("About This System")
-        st.markdown("""
+        st.markdown(f"""
         ### AI Resume Screening System
         **Version:** 1.0  
-        **Author:** Gladiator2005  
+        **Maintainer:** DhruvkrSharma  
         **Date:** 2025-11-09
         
         **Tech Stack:** Streamlit, spaCy, Sentence Transformers, PyMuPDF, SQLite, Plotly
         
-        **GitHub:** [https://github.com/Gladiator2005/resume-screening-system](https://github.com/Gladiator2005/resume-screening-system)
+        **GitHub:** [{REPO_URL}]({REPO_URL})
         """)
 
 st.markdown("---")
-st.markdown('<div style="text-align: center; color: #888;">Made with ❤️ by Gladiator2005 | Powered by Streamlit</div>', 
+st.markdown('<div style="text-align: center; color: #888;">Maintained by DhruvkrSharma | Powered by Streamlit</div>', 
            unsafe_allow_html=True)
