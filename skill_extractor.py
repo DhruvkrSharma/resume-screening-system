@@ -5,6 +5,7 @@ Date: 2025-11-09
 """
 
 import re
+import logging
 import spacy
 from spacy.matcher import PhraseMatcher
 
@@ -25,14 +26,8 @@ def _safe_load_spacy_model(model_name: str):
     try:
         return spacy.load(model_name)
     except OSError:
-        try:
-            # Attempt auto-download (works locally; may be blocked in some CI/Streamlit envs)
-            from spacy.cli import download
-            download(model_name)
-            return spacy.load(model_name)
-        except Exception:
-            # Final fallback to ensure app still runs (reduced accuracy)
-            return spacy.blank("en")
+        logging.warning("spaCy model '%s' is unavailable. Falling back to blank English pipeline.", model_name)
+        return spacy.blank("en")
 
 
 class SkillExtractor:
@@ -103,10 +98,13 @@ class SkillExtractor:
 
         # 4) Noun-chunk best effort
         if not found and hasattr(doc, "noun_chunks"):
-            for chunk in doc.noun_chunks:
-                ctext = chunk.text.lower().strip()
-                if len(ctext) >= 3 and any(tok.lemma_.lower() in self.skills for tok in chunk):
-                    found.add(ctext)
+            try:
+                for chunk in doc.noun_chunks:
+                    ctext = chunk.text.lower().strip()
+                    if len(ctext) >= 3 and any(tok.lemma_.lower() in self.skills for tok in chunk):
+                        found.add(ctext)
+            except ValueError:
+                pass
 
         return sorted(found)
 

@@ -6,24 +6,33 @@ import io
 
 def extract_text_with_pymupdf(pdf_path):
     text = ''
-    with fitz.open(pdf_path) as doc:
-        for page in doc:
-            text += page.get_text()
+    try:
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text += page.get_text()
+    except Exception:
+        return ''
     return text
 
 def extract_text_with_pdfplumber(pdf_path):
     text = ''
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ''
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ''
+    except Exception:
+        return ''
     return text
 
 def extract_text_with_ocr(pdf_path):
     text = ''
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            img = page.to_image().original
-            text += pytesseract.image_to_string(img)  # OCR extraction
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                img = page.to_image().original
+                text += pytesseract.image_to_string(img)  # OCR extraction
+    except Exception:
+        return ''
     return text
 
 
