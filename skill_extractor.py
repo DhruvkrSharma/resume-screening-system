@@ -5,6 +5,7 @@ Date: 2025-11-09
 """
 
 import re
+import logging
 import spacy
 from spacy.matcher import PhraseMatcher
 
@@ -17,22 +18,23 @@ except ImportError:
     ]
 
 
+logger = logging.getLogger(__name__)
+
+
 def _safe_load_spacy_model(model_name: str):
     """
-    Try to load a spaCy model. If not installed, attempt to download it.
-    If download fails (e.g. no network), fall back to blank('en') pipeline.
+    Try to load a spaCy model.
+    If unavailable, fall back to blank('en') deterministically.
     """
     try:
         return spacy.load(model_name)
     except OSError:
-        try:
-            # Attempt auto-download (works locally; may be blocked in some CI/Streamlit envs)
-            from spacy.cli import download
-            download(model_name)
-            return spacy.load(model_name)
-        except Exception:
-            # Final fallback to ensure app still runs (reduced accuracy)
-            return spacy.blank("en")
+        logger.warning(
+            "spaCy model '%s' unavailable. Falling back to blank('en'); accuracy may be reduced.",
+            model_name,
+            exc_info=True,
+        )
+        return spacy.blank("en")
 
 
 class SkillExtractor:

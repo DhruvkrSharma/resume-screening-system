@@ -1,6 +1,6 @@
 # Resume Screening System
 
-**Author:** Gladiator2005  
+**Maintainer:** DhruvkrSharma  
 **Date:** 2025-11-09  
 **Version:** 1.0.0
 
@@ -17,6 +17,13 @@ An intelligent resume screening system that uses NLP and machine learning to mat
 - ✅ **SQLite Database** - Persistent storage with full audit trail
 - ✅ **Ranked Results** - Sort by skills matched + similarity score
 - ✅ **Google Colab Ready** - Works seamlessly in Colab notebooks
+
+## Privacy & Data Handling
+
+- Uploaded resumes are processed locally by the app runtime.
+- Temporary upload files are deleted after screening.
+- Extracted text snippets and screening results are stored in the local SQLite database.
+- Avoid uploading sensitive data to shared/public deployments unless your hosting controls are in place.
 
 ## Installation
 
@@ -79,10 +86,10 @@ resume-screening/
 
 MIT License - Free to use and modify
 
-## Author
+## Maintainer
 
-**Gladiator2005**  
-GitHub: https://github.com/Gladiator2005
+**DhruvkrSharma**  
+GitHub: https://github.com/DhruvkrSharma
 
 ---
 
