@@ -5,6 +5,8 @@ Date: 2025-11-09
 """
 
 import re
+import logging
+from functools import lru_cache
 import spacy
 from spacy.matcher import PhraseMatcher
 
@@ -16,23 +18,23 @@ except ImportError:
         "python", "java", "sql", "react", "docker", "kubernetes"
     ]
 
+logger = logging.getLogger(__name__)
 
+
+@lru_cache(maxsize=2)
 def _safe_load_spacy_model(model_name: str):
     """
-    Try to load a spaCy model. If not installed, attempt to download it.
-    If download fails (e.g. no network), fall back to blank('en') pipeline.
+    Try to load a spaCy model.
+    If unavailable, fall back to blank('en') to keep runtime resilient.
     """
     try:
         return spacy.load(model_name)
     except OSError:
-        try:
-            # Attempt auto-download (works locally; may be blocked in some CI/Streamlit envs)
-            from spacy.cli import download
-            download(model_name)
-            return spacy.load(model_name)
-        except Exception:
-            # Final fallback to ensure app still runs (reduced accuracy)
-            return spacy.blank("en")
+        logger.warning(
+            "spaCy model '%s' not found. Falling back to blank English pipeline.",
+            model_name
+        )
+        return spacy.blank("en")
 
 
 class SkillExtractor:

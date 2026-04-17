@@ -4,10 +4,15 @@ Author: Gladiator2005
 Date: 2025-11-09
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     from google.colab import files as colab_files
-except Exception:
+except ImportError:
     colab_files = None
+    logger.info("google.colab.files is unavailable; Colab upload/download helpers are disabled.")
 
 
 def upload_pdfs_colab():
