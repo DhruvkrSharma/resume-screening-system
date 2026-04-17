@@ -43,7 +43,10 @@ def validate_uploaded_pdfs(uploaded_files):
         mime_type = (uploaded_file.type or "").lower()
         ext = Path(file_name).suffix.lower()
 
-        if mime_type and mime_type != "application/pdf" and ext != ".pdf":
+        is_pdf_extension = ext == ".pdf"
+        is_pdf_mime = mime_type in {"application/pdf", "application/x-pdf"}
+
+        if not is_pdf_extension and not is_pdf_mime:
             errors.append(f"{file_name}: only PDF files are supported.")
             continue
 
@@ -177,7 +180,7 @@ elif page == "➕ Add Role":
                     try:
                         skills_list = normalize_manual_skills(manual_skills)
                         if not skills_list:
-                            raise ValueError("Please provide at least one valid skill.")
+                            raise ValueError("Please provide at least one non-empty skill.")
                         st.session_state.screener.add_role_manual(manual_role_name, skills_list)
                         st.success(f"✅ Role '{manual_role_name}' added with {len(skills_list)} skills!")
                     except (ValueError, sqlite3.Error) as error:

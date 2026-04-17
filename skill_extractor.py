@@ -32,7 +32,6 @@ def _safe_load_spacy_model(model_name: str):
         logger.warning(
             "spaCy model '%s' unavailable. Falling back to blank('en'); accuracy may be reduced.",
             model_name,
-            exc_info=True,
         )
         return spacy.blank("en")
 

@@ -36,10 +36,10 @@ class ResumeDatabase:
             value = int(top_n)
         except (TypeError, ValueError) as exc:
             logger.warning("Invalid top_n value %r (type=%s)", top_n, type(top_n).__name__)
-            raise ValueError("top_n must be a positive integer") from exc
+            raise ValueError("top_n must be an integer") from exc
         if value <= 0:
             logger.warning("Invalid non-positive top_n value %r", top_n)
-            raise ValueError("top_n must be a positive integer")
+            raise ValueError("top_n must be positive")
         return value
     
     def init_db(self):
