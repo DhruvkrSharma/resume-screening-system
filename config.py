@@ -20,6 +20,7 @@ DEFAULT_SEMANTIC_THRESHOLD = 0.45
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
 MIN_MANUAL_SKILLS = 2
 TOP_N_LIMIT_MAX = 100
+MAX_SUMMARY_SEED_CHARS = 450
 
 # Project metadata
 REPO_URL = "https://github.com/DhruvkrSharma/resume-screening-system"

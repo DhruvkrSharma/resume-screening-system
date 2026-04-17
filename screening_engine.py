@@ -10,7 +10,7 @@ from pdf_extractor import extract_text_from_pdf
 from skill_extractor import SkillExtractor
 from semantic_matcher import SemanticMatcher
 from database import ResumeDatabase
-from config import SKILLS_DB, INTERNSHIP_ROLE_TEMPLATES
+from config import SKILLS_DB, INTERNSHIP_ROLE_TEMPLATES, MAX_SUMMARY_SEED_CHARS
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class ResumeScreener:
         skills = self._normalize_skills(self._get_skill_extractor().extract_skills(resume_text or ""))
         return {
             "skills": skills,
-            "summary_seed": " ".join((resume_text or "").strip().split())[:450],
+            "summary_seed": " ".join((resume_text or "").strip().split())[:MAX_SUMMARY_SEED_CHARS],
         }
 
     def match_internship_roles(self, resume_text, top_n=3):

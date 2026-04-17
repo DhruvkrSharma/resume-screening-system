@@ -264,6 +264,7 @@ elif page == "📊 Screen Resumes":
                         
                         if results:
                             results_df = pd.DataFrame(results)
+                            # Stable sorting keeps rank order deterministic when score ties occur.
                             results_df = results_df.sort_values(
                                 by=['num_matched_skills', 'similarity_score', 'resume_id'],
                                 ascending=[False, False, True],

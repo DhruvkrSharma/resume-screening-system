@@ -76,6 +76,7 @@ class ResumeDatabase:
             ON CONFLICT(name) DO UPDATE SET
                 skills_text=excluded.skills_text
             """
+            # created_at is intentionally omitted from UPDATE to preserve original creation timestamp.
             , (name, skills_text, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
